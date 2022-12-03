@@ -962,7 +962,7 @@ make; make install
 
 ```
 
-### 7.12. Util-linux
+### 7.12 util-linux
 
 ```bash
 tar -xf util-linux-2.38.1.tar.xz 
@@ -2257,3 +2257,240 @@ meson --prefix=/usr                 \
 * Looks like that did it
 
   ![image-20221202095315972](lfs.assets/image-20221202095315972.png) 
+
+> Need to finish of systemd
+
+```bash
+ninja
+```
+
+> Ok that didn't work.  It seems now that header files associated with util-linux were not copied over during installation.  Back to util-linux
+
+### :skull: 7.12.1 util-linux try again
+
+> added includedir and --with-pkgconfigdir to see what happens
+
+```bash
+rm -rf util-linux-2.38.1
+tar xf util-linux-2.38.1.tar.xz 
+cd util-linux-2.38.1
+
+mkdir -pv /var/lib/hwclock
+
+./configure ADJTIME_PATH=/var/lib/hwclock/adjtime    \
+            --libdir=/usr/lib    \
+            --includedir=/usr/include \
+            --with-pkgconfigdir=/usr/lib/pkgconfig \
+            --docdir=/usr/share/doc/util-linux-2.38.1 \
+            --disable-chfn-chsh  \
+            --disable-login      \
+            --disable-nologin    \
+            --disable-su         \
+            --disable-setpriv    \
+            --disable-runuser    \
+            --disable-pylibmount \
+            --disable-static     \
+            --without-python     \
+            runstatedir=/run
+```
+
+> Ok it looks like util linux never compiled right the first time /etc/groups was not correctly populated with a tty user in chapter 5.  This is likely just a devin error.
+
+> Ok back to freaking systemd again
+
+```bash
+ninja
+ninja install
+tar -xf ../../systemd-man-pages-251.tar.xz --strip-components=1 -C /usr/share/man
+systemd-machine-id-setup
+systemctl preset-all
+systemctl disable systemd-sysupdate
+```
+
+
+
+
+
+
+
+> 
+
+### 8.73 d-bus
+
+```bash
+tar xf dbus-1.14.0.tar.xz 
+cd dbus-1.14.0
+
+./configure --prefix=/usr                        \
+            --sysconfdir=/etc                    \
+            --localstatedir=/var                 \
+            --runstatedir=/run                   \
+            --disable-static                     \
+            --disable-doxygen-docs               \
+            --disable-xml-docs                   \
+            --docdir=/usr/share/doc/dbus-1.14.0 \
+            --with-system-socket=/run/dbus/system_bus_socket
+            
+make
+make install
+ln -sfv /etc/machine-id /var/lib/dbus
+```
+
+### 8.74 man-db
+
+```bash
+tar xf man-db-2.10.2.tar.xz 
+cd man-db-2.10.2
+
+./configure --prefix=/usr                         \
+            --docdir=/usr/share/doc/man-db-2.10.2 \
+            --sysconfdir=/etc                     \
+            --disable-setuid                      \
+            --enable-cache-owner=bin              \
+            --with-browser=/usr/bin/lynx          \
+            --with-vgrind=/usr/bin/vgrind         \
+            --with-grap=/usr/bin/grap
+            
+make; make install            
+```
+
+### 8.75 procps-ng
+
+```bash
+tar xf procps-ng-4.0.0.tar.xz 
+cd procps-ng-4.0.0
+
+./configure --prefix=/usr                            \
+            --docdir=/usr/share/doc/procps-ng-4.0.0 \
+            --disable-static                         \
+            --disable-kill                           \
+            --with-systemd          
+```
+
+:bomb: Another Error
+
+```
+No package 'libsystemd-login' found
+```
+
+> Resumed here after successful recompilation of util-linux and systemd
+
+```bash
+make; make install
+```
+
+## 8.76 util-linux
+
+> Really, again....
+
+```bash
+rm -rf util-linux-2.38.1
+tar xf util-linux-2.38.1.tar.xz 
+cd util-linux-2.38.1
+
+./configure ADJTIME_PATH=/var/lib/hwclock/adjtime   \
+            --bindir=/usr/bin    \
+            --libdir=/usr/lib    \
+            --sbindir=/usr/sbin  \
+            --docdir=/usr/share/doc/util-linux-2.38.1 \
+            --disable-chfn-chsh  \
+            --disable-login      \
+            --disable-nologin    \
+            --disable-su         \
+            --disable-setpriv    \
+            --disable-runuser    \
+            --disable-pylibmount \
+            --disable-static     \
+            --without-python
+make; make install
+```
+
+> Ok that was gratifying to see the headers and pkgconfig updated
+
+### 8.77 e2fsprogs
+
+```bash
+tar xf e2fsprogs-1.46.5.tar.gz 
+cd e2fsprogs-1.46.5
+mkdir build; cd build
+../configure --prefix=/usr           \
+             --sysconfdir=/etc       \
+             --enable-elf-shlibs     \
+             --disable-libblkid      \
+             --disable-libuuid       \
+             --disable-uuidd         \
+             --disable-fsck
+make; make install             
+```
+
+### 8.79 Stripping
+
+```bash
+save_usrlib="$(cd /usr/lib; ls ld-linux*[^g])
+             libc.so.6
+             libthread_db.so.1
+             libquadmath.so.0.0.0
+             libstdc++.so.6.0.30
+             libitm.so.1.0.0
+             libatomic.so.1.2.0"
+
+cd /usr/lib
+
+for LIB in $save_usrlib; do
+    objcopy --only-keep-debug $LIB $LIB.dbg
+    cp $LIB /tmp/$LIB
+    strip --strip-unneeded /tmp/$LIB
+    objcopy --add-gnu-debuglink=$LIB.dbg /tmp/$LIB
+    install -vm755 /tmp/$LIB /usr/lib
+    rm /tmp/$LIB
+done
+
+online_usrbin="bash find strip"
+online_usrlib="libbfd-2.39.so
+               libhistory.so.8.1
+               libncursesw.so.6.3
+               libm.so.6
+               libreadline.so.8.1
+               libz.so.1.2.12
+               $(cd /usr/lib; find libnss*.so* -type f)"
+
+for BIN in $online_usrbin; do
+    cp /usr/bin/$BIN /tmp/$BIN
+    strip --strip-unneeded /tmp/$BIN
+    install -vm755 /tmp/$BIN /usr/bin
+    rm /tmp/$BIN
+done
+
+for LIB in $online_usrlib; do
+    cp /usr/lib/$LIB /tmp/$LIB
+    strip --strip-unneeded /tmp/$LIB
+    install -vm755 /tmp/$LIB /usr/lib
+    rm /tmp/$LIB
+done
+
+for i in $(find /usr/lib -type f -name \*.so* ! -name \*dbg) \
+         $(find /usr/lib -type f -name \*.a)                 \
+         $(find /usr/{bin,sbin,libexec} -type f); do
+    case "$online_usrbin $online_usrlib $save_usrlib" in
+        *$(basename $i)* )
+            ;;
+        * ) strip --strip-unneeded $i
+            ;;
+    esac
+done
+
+unset BIN LIB save_usrlib online_usrbin online_usrlib
+```
+
+### 8.8 Cleanup
+
+```bash
+rm -rf /tmp/*
+find /usr/lib /usr/libexec -name \*.la -delete
+find /usr -depth -name $(uname -m)-lfs-linux-gnu\* | xargs rm -rf
+userdel -r tester
+
+```
+
+## Chapter 9 - System Configuration
+
