@@ -2909,7 +2909,7 @@ LEFT OFF HERE
     
     ![image-20221206125254336](lfs.assets/image-20221206125254336.png) 
     
-    ### Tweak /etc/hosts
+    ### Tweak /etc/fstab
     
     > Grub was able to point the boot process to /dev/sda2 where the boot files had been located.  To see /boot after we are up and running, add that to /etc/hosts on lfs
     
