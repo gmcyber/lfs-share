@@ -31,8 +31,10 @@
       /bin/bash --login
   ```
 
-  
+  ```chroot-setup.sh``` in root's home
 
+  
+  
   
 
 ## Preparing the Build
@@ -2494,3 +2496,429 @@ userdel -r tester
 
 ## Chapter 9 - System Configuration
 
+* :camera_flash:Powered off Snapshot - Chapter 9
+
+* chroot and mount script (made this)
+
+  ![image-20221205175815280](lfs.assets/image-20221205175815280.png) 
+
+  
+
+  ### 9.2 Networking Configuration
+
+  > The plan is to stick with systemd-networkd and systemd-resolvd and use a dhcp IP.  We will let the system pick its own device name as well.
+
+  * Bote in my vwmare installation vmnet8 has the range 192.168.229.0/24
+  * Mother ship has a DHCP issued IP
+  * LFS-gmcyber Network with be VMWare NAT dhcp ip address
+  * Gateway and DNS will be provided by VMWare NAT Gateway
+
+  #### 9.2.1.3 DHCP
+
+  > Note, we have no clue yet on the network device name, we will return to fix that.
+
+  ```bash
+  cat > /etc/systemd/network/10-eth-dhcp.network << "EOF"
+  [Match]
+  Name=<network-device-name>
+  
+  [Network]
+  DHCP=ipv4
+  
+  [DHCP]
+  UseDomains=true
+  EOF
+  ```
+
+  
+
+  > Skipping resolv.conf, we will let systemd-resovld handle it
+
+  ### 9.2.3 Hostname
+
+  ```bash
+  echo "lfs-gmcyber" > /etc/hostname
+  ```
+
+  ### 9.2.4 /etc/hosts
+
+  ```bash
+  cat > /etc/hosts << "EOF"
+  # Begin /etc/hosts
+  
+  127.0.0.1 localhost.localdomain localhost
+  127.0.1.1 lfs-gmcyber
+  ::1       localhost ip6-localhost ip6-loopback
+  ff02::1   ip6-allnodes
+  ff02::2   ip6-allrouters
+  
+  # End /etc/hosts
+  EOF
+  ```
+
+  ## 9.5 System Clock
+
+  ![image-20221205182135355](lfs.assets/image-20221205182135355.png) 
+
+  > Set to UTC, good to go
+
+  >  Disabling he systemd-timesyncd, it doesn't sound as though it is as capable as ntpd
+
+  ```bash
+  systemctl disable systemd-timesyncd
+  ```
+
+  ### 9.6 Linux Console
+
+  > Ignoring this section
+
+
+  ### 9.7 Locale
+
+    ```bash
+    cat > /etc/locale.conf << "EOF"
+    LANG=EN_US.UTF-8
+    EOF
+    ```
+
+
+
+  ### 9.8 inputrc
+
+```bash
+cat > /etc/inputrc << "EOF"
+# Begin /etc/inputrc
+# Modified by Chris Lynn <roryo@roryo.dynup.net>
+
+# Allow the command prompt to wrap to the next line
+set horizontal-scroll-mode Off
+
+# Enable 8-bit input
+set meta-flag On
+set input-meta On
+
+# Turns off 8th bit stripping
+set convert-meta Off
+
+# Keep the 8th bit for display
+set output-meta On
+
+# none, visible or audible
+set bell-style none
+
+# All of the following map the escape sequence of the value
+# contained in the 1st argument to the readline specific functions
+"\eOd": backward-word
+"\eOc": forward-word
+
+# for linux console
+"\e[1~": beginning-of-line
+"\e[4~": end-of-line
+"\e[5~": beginning-of-history
+"\e[6~": end-of-history
+"\e[3~": delete-char
+"\e[2~": quoted-insert
+
+# for xterm
+"\eOH": beginning-of-line
+"\eOF": end-of-line
+
+# for Konsole
+"\e[H": beginning-of-line
+"\e[F": end-of-line
+
+# End /etc/inputrc
+EOF
+```
+
+### 9.9 shells
+
+```bash
+cat > /etc/shells << "EOF"
+# Begin /etc/shells
+
+/bin/sh
+/bin/bash
+
+# End /etc/shells
+EOF
+
+```
+
+### 9.10 Systemd configuration
+
+* Lets not clear the screen after boot
+
+  ```bash
+  mkdir -pv /etc/systemd/system/getty@tty1.service.d
+  
+  cat > /etc/systemd/system/getty@tty1.service.d/noclear.conf << EOF
+  [Service]
+  TTYVTDisallocate=no
+  EOF
+  
+  ```
+
+  > Skip everything else
+
+
+## Chapter 10 Making LFS bootable
+
+### 10.2 /etc/fstab
+
+> map the values from lsblk  fstab file, removing reference to sdb and changing to sda. 
+
+
+
+![image-20221205184756043](lfs.assets/image-20221205184756043.png) 
+
+```
+cat > /etc/fstab << "EOF"
+# Begin /etc/fstab
+
+# file system  mount-point  type     options             dump  fsck
+#                                                              order
+
+/dev/sda3     /            ext4   defaults            1     1
+/dev/sda4     /home            ext4   defaults            1     1
+/dev/sda5     swap         swap     pri=1               0     0
+
+# End /etc/fstab
+EOF
+```
+
+### 10.3.1 Linux Kernel
+
+* :camera_flash: Poweroff Snapshot.  Before New Kernel
+
+* mount everything again
+
+  ```bash
+  sudo -i
+  ./chroot-setup.sh
+  ```
+
+* in lfs chroot
+
+  ```bash
+  tar xf linux-5.19.2.tar.xz 
+  cd tar xf linux-5.19.2
+  make mrproper
+  make defconfig
+  ```
+
+
+* Customizing the kernel, this is not straight forward and is geared towards VMWare Workstation based hardware.  The .vmx file for this has the following hardware selected.
+
+  ```
+  scsi0.virtualDev = "lsilogic"
+  ethernet0.connectionType = "nat"
+  ethernet0.virtualDev = "e1000"
+  ```
+
+* If you are running something other than VMWare Workstation, you can likely find your appropriate configuration in your motherships /boot/whateveryourkernelconfigiscalledfile
+
+#### References:  
+
+* https://gist.github.com/jukbot/956963fbd033658511c0
+* Devin's old [config](https://drive.google.com/file/d/1RHq5uPH-lhTCh0PuoHDkJR9sO4j0Rs-O/view?usp=sharing) from a couple years ago 
+* https://forums.gentoo.org/viewtopic-t-961502.html
+* Devin's F22 working config on [Google Drive](https://drive.google.com/file/d/1d6kY2LJ3hLCNz93hjBN9CV1X6MRFCcAy/view?usp=sharing).  This is also in the root of Devin's private tech journal under LFS
+  * if you are using this file, rename it to .config and drop it in the root of the linux-5.19.2 kernel source directory.
+  * This file loads pretty much any conceivable dependencies for vmware workstation as well as ext2,3 and 4.
+
+```bash
+make
+```
+
+```bash
+make modules_install
+```
+
+The advice to bind mount is problematic in my environment as I have /boot partition.  Do this as lfs chroot root user
+
+![image-20221206115159558](lfs.assets/image-20221206115159558.png) 
+
+```bash
+mount /dev/sdb2 /boot
+```
+
+```bash
+cp -iv arch/x86/boot/bzImage /boot/vmlinuz-5.19.2-lfs-11.2-systemd
+cp -iv System.map /boot/System.map-5.19.2
+cp -iv .config /boot/config-5.19.2
+install -d /usr/share/doc/linux-5.19.2
+
+```
+
+![image-20221206115324915](lfs.assets/image-20221206115324915.png) 
+
+
+
+### 10.3.2 Module load order
+
+```bash
+install -v -m755 -d /etc/modprobe.d
+cat > /etc/modprobe.d/usb.conf << "EOF"
+# Begin /etc/modprobe.d/usb.conf
+
+install ohci_hcd /sbin/modprobe ehci_hcd ; /sbin/modprobe -i ohci_hcd ; true
+install uhci_hcd /sbin/modprobe ehci_hcd ; /sbin/modprobe -i uhci_hcd ; true
+
+# End /etc/modprobe.d/usb.conf
+EOF
+```
+
+LEFT OFF HERE
+
+### 10.4 Grub
+
+> :skull_and_crossbones: This section if done incorrectly will bork mothership.  Take a powered off VMWare Snapshot called before grub
+
+* remount and chroot
+
+  ```bash
+  ./chroot-setup.sh 
+  ```
+
+  
+
+* bind mount /boot again in the chroot terminal
+
+  ```bash
+  mount /dev/sdb2 /boot
+  ```
+
+* :skull:  Be careful here, if you blindly follow the book you will damage your host.
+  change to /deb/sdb!
+
+    
+
+  ```bash
+  (lfs chroot) root:/# grub-install /dev/sdb
+  ```
+
+  ![image-20221206082334830](lfs.assets/image-20221206082334830.png) 
+
+* grub.conf
+
+  > Note there are some tweaks here.  Specifically, LFS_BOOT so the /boot is removed is its own partition and / is on sda3 which is changed from the books /dev/sda2.
+
+  ```bash
+  cat > /boot/grub/grub.cfg << "EOF"
+  # Begin /boot/grub/grub.cfg
+  set default=0
+  set timeout=5
+  
+  insmod ext2
+  set root=(hd0,2)
+  
+  menuentry "GNU/Linux, Linux 5.19.2-lfs-11.2-systemd" {
+          linux  /vmlinuz-5.19.2-lfs-11.2-systemd root=/dev/sda3 ro
+  }
+  EOF
+  ```
+## Chapter 11 - The End
+
+  ```bash
+  echo 11.2-systemd > /etc/lfs-release
+  cat > /etc/lsb-release << "EOF"
+  DISTRIB_ID="Linux From Scratch"
+  DISTRIB_RELEASE="11.2-systemd"
+  DISTRIB_CODENAME="gmcyber"
+  DISTRIB_DESCRIPTION="Linux From Scratch"
+  EOF
+  ```
+
+  ```bash
+  cat > /etc/os-release << "EOF"
+  NAME="Linux From Scratch"
+  VERSION="11.2-systemd"
+  ID=lfs
+  PRETTY_NAME="Linux From Scratch 11.2-systemd"
+  VERSION_CODENAME="gmcyber"
+  EOF
+  ```
+
+## Eplogue Devin Notes on Booting to a new VMWare Workstation VM
+
+  * power off mothership
+
+    ```bash
+    logout
+    umount -v $LFS/dev/pts
+    umount -v $LFS/dev
+    umount -v $LFS/run
+    umount -v $LFS/proc
+    umount -v $LFS/sys
+    umount /mnt/lfs/boot
+    umount /mnt/lfs/home
+    umount /mnt/lfs
+    shutdown -h now
+    ```
+
+  * create a full clone of mothership if you have space called Clone of mothership2 (chapter 11).  Otherwise take a snapshot of mothership.
+
+     
+
+  * create a new VM called lfs
+
+    ![image-20221206084434246](lfs.assets/image-20221206084434246.png) 
+
+    * 1 Gb RAM should do it.
+
+    * I'm using NAT network
+
+      ![image-20221206090009915](lfs.assets/image-20221206090009915.png) 
+
+      ![image-20221206090112144](lfs.assets/image-20221206090112144.png) 
+
+    ![image-20221206124132789](lfs.assets/image-20221206124132789.png) 
+
+    
+
+    ### Boot lfs
+
+    
+
+    ![image-20221206124455966](lfs.assets/image-20221206124455966.png) 
+
+    ### Networking
+
+    * Enter the device name in the networkd configuration
+
+    > Note that the device is named enp2s1
+    
+    ![image-20221206124717116](lfs.assets/image-20221206124717116.png) 
+    
+    ```bash
+    systemctl restart systemd-networkd
+    ```
+
+    ### The proof
+
+    * [demo video](https://drive.google.com/file/d/1YHhNWArjemOhis2YwYc9DKMSN82RnfK9/view?usp=sharing)
+    
+    * ```hostname```
+    * ```ip a```
+    * ```ping google.com```
+    
+    ![image-20221206125147833](lfs.assets/image-20221206125147833.png) 
+    
+    
+    
+    ![image-20221206125254336](lfs.assets/image-20221206125254336.png) 
+    
+    ### Tweak /etc/hosts
+    
+    > Grub was able to point the boot process to /dev/sda2 where the boot files had been located.  To see /boot after we are up and running, add that to /etc/hosts on lfs
+    
+    ![image-20221206152909967](lfs.assets/image-20221206152909967.png) 
+    
+    ```bash
+    mount -a
+    systemctl daemon-reload
+    ls /boot
+    ```
+    
+    
